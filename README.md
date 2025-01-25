@@ -116,6 +116,7 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 ![Logo](/images/deploy.png)
+![Logo](/images/running.png)
 
 ## ⚙️ Configuration Options
 
