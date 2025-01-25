@@ -9,6 +9,44 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
+# Help function
+show_help() {
+    echo -e "${BLUE}${BOLD}🚀 Mozio ECS Deployment Script${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "Usage: ./deploy.sh [OPTIONS] [REGION] [STACK_NAME] [ECR_REPO_NAME]"
+    echo
+    echo -e "${BOLD}Options:${NC}"
+    echo -e "  -h    Show this help message"
+    echo
+    echo -e "${BOLD}Arguments:${NC}"
+    echo -e "  REGION         AWS Region (default: us-east-2)"
+    echo -e "  STACK_NAME     CloudFormation stack name (default: moziostackdemo22)"
+    echo -e "  ECR_REPO_NAME  ECR repository name (default: moziorepoecrr)"
+    echo
+    echo -e "${BOLD}Examples:${NC}"
+    echo -e "  ./deploy.sh                                     # Deploy with defaults"
+    echo -e "  ./deploy.sh us-west-2                          # Deploy to us-west-2"
+    echo -e "  ./deploy.sh us-west-2 mystack myrepo          # Deploy with custom names"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    exit 0
+}
+
+# Parse options
+while getopts "h" opt; do
+    case $opt in
+        h)
+            show_help
+            ;;
+        \?)
+            echo -e "${RED}Invalid option: -$OPTARG${NC}" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Shift past the options
+shift $((OPTIND-1))
+
 # Spinner animation
 spinner() {
     local pid=$1
@@ -25,9 +63,9 @@ spinner() {
 }
 
 # Default Configuration
-REGION=${1:-"us-east-1"}
-STACK_NAME=${2:-"moziostackdemo2"}
-ECR_REPO_NAME=${3:-"moziorepoecr"}
+REGION=${1:-"us-east-2"}
+STACK_NAME=${2:-"moziostackdemo22"}
+ECR_REPO_NAME=${3:-"moziorepoecrr"}
 
 # Print configuration
 echo -e "\n${BLUE}${BOLD}🚀 Starting Mozio ECS Deployment${NC}"
