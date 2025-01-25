@@ -24,13 +24,17 @@ spinner() {
     printf "    \b\b\b\b"
 }
 
-# Configuration
-REGION="us-east-1"
-STACK_NAME="moziostackdemo2"
-ECR_REPO_NAME="moziorepoecr"
+# Default Configuration
+REGION=${1:-"us-east-1"}
+STACK_NAME=${2:-"moziostackdemo2"}
+ECR_REPO_NAME=${3:-"moziorepoecr"}
 
-# Print header
+# Print configuration
 echo -e "\n${BLUE}${BOLD}🚀 Starting Mozio ECS Deployment${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Region:${NC} $REGION"
+echo -e "${BOLD}Stack Name:${NC} $STACK_NAME"
+echo -e "${BOLD}ECR Repository:${NC} $ECR_REPO_NAME"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 # Check if AWS_ACCOUNT_ID is set
