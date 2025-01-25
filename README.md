@@ -93,7 +93,7 @@ Public subnets can be locked down with security groups
 
 ## Prerequisites
 
-1. AWS CLI installation:
+1. Configure AWS credentials
 ```bash
 aws configure
 ```
