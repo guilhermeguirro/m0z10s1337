@@ -10,73 +10,53 @@ The infrastructure includes:
 - Security Groups and IAM roles
 
 # AWS VPC Infrastructure Explained
-The Basics
-Think of a VPC as your private cloud data center. We're building it with these IPs: 10.0.0.0/16 (gives us 65,536 addresses to work with).
-Network Layout
-Public Areas (Public Subnets)
 
-Two zones: 10.0.1.0/24 and 10.0.2.0/24
-Direct internet access
-Perfect for web servers and public APIs
-Automatically gives public IPs to servers
+## What is a VPC?
+Think of a VPC as your private cloud datacenter. We're using IP range 10.0.0.0/16, giving us 65,536 addresses to work with.
 
-Private Areas (Private Subnets)
+## Network Zones
 
-Two zones: 10.0.3.0/24 and 10.0.4.0/24
-No direct internet access
-Great for databases and internal services
-Extra security by being isolated
+### Public Areas (The Front Yard)
+- Located in two zones: 10.0.1.0/24 and 10.0.2.0/24
+- Direct internet access
+- Perfect for websites and APIs
+- Servers automatically get public IPs
 
-Internet Connectivity
-For Public Resources
+### Private Areas (The Back Yard)
+- Located in two zones: 10.0.3.0/24 and 10.0.4.0/24
+- No direct internet access
+- Ideal for databases and internal services
+- Extra security through isolation
 
-Internet Gateway: The main door to the internet
-Lets your public servers talk directly to the internet
-Used by load balancers and public APIs
+## Internet Access
 
-For Private Resources
+### For Public Resources (Internet Gateway)
+- Main door to the internet
+- Direct two-way communication
+- Used by load balancers and public APIs
 
-NAT Gateway: The secure messenger
-Lets private servers download updates and packages
-One-way street: can reach out, but no one can reach in
-Located in public subnet but serves private ones
+### For Private Resources (NAT Gateway)
+- Secure one-way internet access
+- Allows downloads and updates
+- Can reach out, but no incoming traffic
+- Placed in public subnet
 
-Traffic Control
-Public Routes
+## Why Two of Everything?
+- Two zones = backup plan
+- If one fails, the other keeps running
+- Critical for 24/7 uptime
 
-Direct path to internet via Internet Gateway
-Used by your public-facing services
-Think of it as the highway to the internet
+## Security Setup
+- Public areas: Controlled access through security groups
+- Private areas: Extra isolated, limited access
+- Load Balancer: Accepts web traffic (port 80)
+- Containers: Only accept traffic from load balancer (port 3000)
 
-Private Routes
-
-All internet traffic goes through NAT Gateway
-More controlled and secure
-Think of it as a secure tunnel
-
-Availability & Redundancy
-
-Everything is doubled across two zones
-If one zone fails, the other keeps running
-Critical for keeping your services online
-
-Naming Convention
-
-Everything is tagged with environment names (dev/prod)
-Makes it easy to identify resources
-Example: dev-public-subnet-1, prod-private-subnet-2
-
-Cost Considerations
-
-NAT Gateway costs hourly
-Consider costs when choosing regions
-Each subnet can handle 256 IPs
-
-Security Features
-
-DNS support enabled
-Private subnets are truly private
-Public subnets can be locked down with security groups
+## Cost Tips
+- NAT Gateway charges hourly
+- Choose regions carefully
+- Each subnet fits 256 IPs
+- Plan capacity based on needs
 
 ### Components
 - **ECS Fargate Cluster**: Serverless compute for Docker containers
