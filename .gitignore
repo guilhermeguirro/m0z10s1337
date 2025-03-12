@@ -1,0 +1,4 @@
+# Kubernetes and IDE files
+*.kubeconfig
+.vscode/
+.idea/
