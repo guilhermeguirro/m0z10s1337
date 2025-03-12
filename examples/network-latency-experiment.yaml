@@ -1,0 +1,89 @@
+apiVersion: chaos.example.com/v1
+kind: ChaosExperiment
+metadata:
+  name: api-gateway-latency-test
+  namespace: chaos-engineering
+  labels:
+    app: api-gateway
+    type: network-latency
+    environment: staging
+  annotations:
+    description: "Test API gateway resilience to network latency"
+    owner: "platform-team@example.com"
+spec:
+  target:
+    namespace: staging
+    selector:
+      matchLabels:
+        app: api-gateway
+        tier: frontend
+  action:
+    type: networkLatency
+    latency: 500ms
+    jitter: 50ms
+    duration: 10m
+    percentage: 50
+    correlation: 70
+    distribution: "normal"
+    targets:
+      - destination:
+          selector:
+            matchLabels:
+              app: payment-service
+          port: 8080
+      - destination:
+          selector:
+            matchLabels:
+              app: inventory-service
+          port: 8080
+  schedule:
+    cron: "0 1 * * 2"  # Every Tuesday at 1 AM
+    timeZone: "UTC"
+  monitoring:
+    grafanaDashboard: http://grafana.monitoring/d/chaos-experiments
+    prometheus:
+      endpoint: http://prometheus.monitoring:9090
+      queries:
+        - name: p95Latency
+          query: 'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="api-gateway"}[1m])) by (le))'
+          threshold: 1.0
+          operator: lt
+        - name: errorRate
+          query: 'sum(rate(http_requests_total{status=~"5..",service="api-gateway"}[1m])) / sum(rate(http_requests_total{service="api-gateway"}[1m])) * 100'
+          threshold: 5.0
+          operator: lt
+    alerts:
+      - name: HighLatency
+        threshold: 1000
+        duration: 1m
+        unit: "ms"
+      - name: HighErrorRate
+        threshold: 5
+        duration: 1m
+        unit: "percent"
+  statusChecks:
+    - type: http
+      endpoint: https://api.example.com/health
+      expectedStatus: 200
+      interval: 10s
+      timeout: 5s
+      failureThreshold: 3
+    - type: prometheus
+      query: 'up{job="api-gateway"}'
+      expectedValue: 1
+      interval: 30s
+  cleanup:
+    enabled: true
+    deleteNamespace: false
+    restoreState: true
+  results:
+    storeInCluster: true
+    exportMetrics: true
+    notifyOnCompletion: true
+    notifyOnFailure: true
+    recipients:
+      - type: slack
+        channel: "#chaos-experiments"
+      - type: email
+        address: "team@example.com"
+  dryRun: false 
