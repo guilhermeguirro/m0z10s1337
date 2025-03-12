@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: chaos-kubernetes-agent
+  namespace: chaos-engineering
+  labels:
+    app: chaos-kubernetes-agent
+    component: agent
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-inject-status: "update"
+    vault.hashicorp.com/role: "chaos-engineering"
+    vault.hashicorp.com/agent-run-as-user: "1000"
+spec:
+  selector:
+    matchLabels:
+      app: chaos-kubernetes-agent
+  template:
+    metadata:
+      labels:
+        app: chaos-kubernetes-agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/role: "chaos-engineering"
+        vault.hashicorp.com/agent-run-as-user: "1000"
+        vault.hashicorp.com/agent-inject-secret-aws: "chaos-engineering/data/aws"
+        vault.hashicorp.com/agent-inject-template-aws: |
+          {{- with secret "chaos-engineering/data/aws" -}}
+          export AWS_ACCESS_KEY_ID="{{ .Data.data.access_key_id }}"
+          export AWS_SECRET_ACCESS_KEY="{{ .Data.data.secret_access_key }}"
+          export AWS_REGION="{{ .Data.data.region }}"
+          {{- end -}}
+    spec:
+      serviceAccountName: chaos-kubernetes-agent
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+      - name: kubernetes-agent
+        image: chaos-engineering/kubernetes-agent:v1.0.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8081
+          protocol: TCP
+        - name: grpc
+          containerPort: 9091
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: CONTROL_PLANE_URL
+          value: "chaos-control-plane.chaos-engineering.svc.cluster.local:9090"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: AGENT_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+        - name: VAULT_ENABLED
+          value: "true"
+        - name: VAULT_SECRETS_PATH
+          value: "/vault/secrets"
+        - name: CLOUD_CREDENTIALS_TYPE
+          value: "vault"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/chaos-engineering
+        - name: docker-socket
+          mountPath: /var/run/docker.sock
+        - name: kubelet-dir
+          mountPath: /var/lib/kubelet
+          readOnly: true
+        - name: vault-config
+          mountPath: /etc/vault
+      volumes:
+      - name: config-volume
+        configMap:
+          name: chaos-kubernetes-agent-config
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket
+      - name: kubelet-dir
+        hostPath:
+          path: /var/lib/kubelet
+          type: Directory
+      - name: vault-config
+        configMap:
+          name: vault-integration
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chaos-kubernetes-agent-config
+  namespace: chaos-engineering
+data:
+  config.yaml: |
+    agent:
+      id: "kubernetes-agent"
+      type: "kubernetes"
+      heartbeatIntervalSeconds: 30
+    capabilities:
+      podFailure: true
+      containerKill: true
+      resourceExhaustion: true
+      networkChaos: true
+    security:
+      tlsEnabled: true
+      verifyControlPlane: true
+      secretsManager: vault
+    experiments:
+      maxConcurrent: 3
+      timeoutSeconds: 1800
+    credentials:
+      aws:
+        type: vault
+        path: /vault/secrets/aws
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-kubernetes-agent
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["chaos.example.com"]
+  resources: ["chaosexperiments", "chaosresults"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-kubernetes-agent
+subjects:
+- kind: ServiceAccount
+  name: chaos-kubernetes-agent
+  namespace: chaos-engineering
+roleRef:
+  kind: ClusterRole
+  name: chaos-kubernetes-agent
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-kubernetes-agent
+  namespace: chaos-engineering

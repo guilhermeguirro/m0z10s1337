@@ -9,122 +9,89 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
-# Help function
-show_help() {
-    echo -e "${BLUE}${BOLD}🚀 Mozio ECS Deployment Script${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "Usage: ./deploy.sh [OPTIONS] [REGION] [STACK_NAME] [ECR_REPO_NAME]"
-    echo
-    echo -e "${BOLD}Options:${NC}"
-    echo -e "  -h    Show this help message"
-    echo
-    echo -e "${BOLD}Arguments:${NC}"
-    echo -e "  REGION         AWS Region (default: us-east-2)"
-    echo -e "  STACK_NAME     CloudFormation stack name (default: moziostackdemo22)"
-    echo -e "  ECR_REPO_NAME  ECR repository name (default: moziorepoecrr)"
-    echo
-    echo -e "${BOLD}Examples:${NC}"
-    echo -e "  ./deploy.sh                                     # Deploy with defaults"
-    echo -e "  ./deploy.sh us-west-2                          # Deploy to us-west-2"
-    echo -e "  ./deploy.sh us-west-2 mystack myrepo          # Deploy with custom names"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    exit 0
-}
+# Configuration
+NAMESPACE="chaos-engineering"
+CONTROL_PLANE_IMAGE="chaos-engineering/control-plane:v1.0.0"
+KUBERNETES_AGENT_IMAGE="chaos-engineering/kubernetes-agent:v1.0.0"
 
-# Parse options
-while getopts "h" opt; do
-    case $opt in
-        h)
-            show_help
-            ;;
-        \?)
-            echo -e "${RED}Invalid option: -$OPTARG${NC}" >&2
-            exit 1
-            ;;
-    esac
-done
+# Print banner
+echo -e "${GREEN}"
+echo "====================================================="
+echo "       Chaos Engineering Platform Deployment         "
+echo "====================================================="
+echo -e "${NC}"
 
-# Shift past the options
-shift $((OPTIND-1))
-
-# Spinner animation
-spinner() {
-    local pid=$1
-    local delay=0.1
-    local spinstr='|/-\'
-    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
-        local temp=${spinstr#?}
-        printf " [%c]  " "$spinstr"
-        local spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
-        printf "\b\b\b\b\b\b"
-    done
-    printf "    \b\b\b\b"
-}
-
-# Default Configuration
-REGION=${1:-"us-east-2"}
-STACK_NAME=${2:-"moziostackdemo22"}
-ECR_REPO_NAME=${3:-"moziorepoecrr"}
-
-# Print configuration
-echo -e "\n${BLUE}${BOLD}🚀 Starting Mozio ECS Deployment${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Region:${NC} $REGION"
-echo -e "${BOLD}Stack Name:${NC} $STACK_NAME"
-echo -e "${BOLD}ECR Repository:${NC} $ECR_REPO_NAME"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-
-# Check if AWS_ACCOUNT_ID is set
-if [ -z "$AWS_ACCOUNT_ID" ]; then
-    echo -e "${RED}❌ Error: AWS_ACCOUNT_ID environment variable is not set${NC}"
+# Check if kubectl is installed
+if ! command -v kubectl &> /dev/null; then
+    echo -e "${RED}Error: kubectl is not installed. Please install kubectl first.${NC}"
     exit 1
 fi
 
-# Build Docker image in parallel with ECR repository creation
-echo -e "${YELLOW}📦 Building Docker image...${NC}"
-docker build -t ${ECR_REPO_NAME} . --no-cache &
-BUILD_PID=$!
+# Check if user is authenticated with Kubernetes
+echo "Checking Kubernetes connection..."
+if ! kubectl get nodes &> /dev/null; then
+    echo -e "${RED}Error: Failed to connect to Kubernetes cluster. Please check your kubeconfig.${NC}"
+    exit 1
+fi
 
-echo -e "${YELLOW}🏗️  Creating/checking ECR repository...${NC}"
-aws ecr create-repository --repository-name ${ECR_REPO_NAME} --region ${REGION} 2>/dev/null || true
+# Create namespace if it doesn't exist
+echo "Creating namespace if it doesn't exist..."
+kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-# Wait for build to complete
-echo -ne "${YELLOW}⏳ Waiting for Docker build to complete...${NC}"
-spinner $BUILD_PID
-echo -e "${GREEN}✅ Done!${NC}"
+# Function to deploy manifests
+deploy_manifests() {
+    local dir=$1
+    local component=$2
+    
+    echo -e "${YELLOW}Deploying $component...${NC}"
+    for file in $dir/*.yaml; do
+        if [ -f "$file" ]; then
+            echo "Applying $file..."
+            kubectl apply -f "$file"
+        fi
+    done
+}
 
-# Login and push to ECR
-echo -e "\n${YELLOW}🔐 Logging into ECR...${NC}"
-aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.${REGION}.amazonaws.com"
+# Deploy CRDs
+echo "Deploying Custom Resource Definitions..."
+kubectl apply -f manifests/crds/ --server-side || {
+    echo -e "${YELLOW}Warning: CRDs directory not found or error applying CRDs. Continuing...${NC}"
+}
 
-echo -e "${YELLOW}📤 Pushing Docker image...${NC}"
-docker tag "${ECR_REPO_NAME}:latest" "$AWS_ACCOUNT_ID.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO_NAME}:latest"
-docker push "$AWS_ACCOUNT_ID.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO_NAME}:latest"
+# Deploy control plane
+deploy_manifests "manifests/control-plane" "control plane"
 
-# Deploy CloudFormation stack with faster options
-echo -e "\n${YELLOW}🚀 Deploying CloudFormation stack...${NC}"
-aws cloudformation deploy \
-  --template-file infrastructure.yml \
-  --stack-name ${STACK_NAME} \
-  --parameter-overrides \
-    "EnvironmentName=dev" \
-    "ContainerImage=$AWS_ACCOUNT_ID.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO_NAME}:latest" \
-    "ContainerPort=3000" \
-  --capabilities CAPABILITY_IAM \
-  --no-fail-on-empty-changeset \
-  --disable-rollback
+# Wait for control plane to be ready
+echo "Waiting for control plane to be ready..."
+kubectl rollout status deployment/chaos-control-plane -n $NAMESPACE --timeout=300s || {
+    echo -e "${RED}Error: Control plane deployment timed out.${NC}"
+    exit 1
+}
 
-# Get the ALB URL as soon as it's available
-echo -e "\n${YELLOW}🔍 Getting application URL...${NC}"
-ALB_URL=$(aws cloudformation describe-stacks \
-  --stack-name ${STACK_NAME} \
-  --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerDNS`].OutputValue' \
-  --output text)
+# Deploy agents
+deploy_manifests "manifests/agents" "agents"
 
-echo -e "\n${GREEN}${BOLD}✨ Deployment Summary${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}✅ Deployment in progress${NC}"
-echo -e "${BOLD}🌍 Application URL:${NC} http://${ALB_URL}"
-echo -e "${YELLOW}⏳ Note: It may take a few minutes for the application to become available${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n" 
+# Wait for agents to be ready
+echo "Waiting for Kubernetes agent to be ready..."
+kubectl rollout status daemonset/chaos-kubernetes-agent -n $NAMESPACE --timeout=300s || {
+    echo -e "${RED}Error: Kubernetes agent deployment timed out.${NC}"
+    exit 1
+}
+
+# Check if everything is running
+echo "Checking deployment status..."
+kubectl get all -n $NAMESPACE
+
+# Print success message
+echo -e "${GREEN}"
+echo "====================================================="
+echo "       Chaos Engineering Platform Deployed!          "
+echo "====================================================="
+echo ""
+echo "Control Plane URL: http://chaos-control-plane.$NAMESPACE.svc.cluster.local"
+echo ""
+echo "To run your first experiment:"
+echo "kubectl apply -f examples/pod-failure-experiment.yaml"
+echo -e "${NC}"
+
+exit 0 

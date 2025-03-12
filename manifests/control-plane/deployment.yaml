@@ -1,0 +1,223 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-control-plane
+  namespace: chaos-engineering
+  labels:
+    app: chaos-control-plane
+    component: core
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-inject-status: "update"
+    vault.hashicorp.com/role: "chaos-engineering"
+    vault.hashicorp.com/agent-run-as-user: "1000"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: chaos-control-plane
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: chaos-control-plane
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/role: "chaos-engineering"
+        vault.hashicorp.com/agent-run-as-user: "1000"
+        vault.hashicorp.com/agent-inject-secret-aws: "chaos-engineering/data/aws"
+        vault.hashicorp.com/agent-inject-template-aws: |
+          {{- with secret "chaos-engineering/data/aws" -}}
+          export AWS_ACCESS_KEY_ID="{{ .Data.data.access_key_id }}"
+          export AWS_SECRET_ACCESS_KEY="{{ .Data.data.secret_access_key }}"
+          export AWS_REGION="{{ .Data.data.region }}"
+          {{- end -}}
+        vault.hashicorp.com/agent-inject-secret-gcp: "chaos-engineering/data/gcp"
+        vault.hashicorp.com/agent-inject-template-gcp: |
+          {{- with secret "chaos-engineering/data/gcp" -}}
+          {{ .Data.data.credentials }}
+          {{- end -}}
+        vault.hashicorp.com/agent-inject-secret-azure: "chaos-engineering/data/azure"
+        vault.hashicorp.com/agent-inject-template-azure: |
+          {{- with secret "chaos-engineering/data/azure" -}}
+          export AZURE_CLIENT_ID="{{ .Data.data.client_id }}"
+          export AZURE_CLIENT_SECRET="{{ .Data.data.client_secret }}"
+          export AZURE_TENANT_ID="{{ .Data.data.tenant_id }}"
+          export AZURE_SUBSCRIPTION_ID="{{ .Data.data.subscription_id }}"
+          {{- end -}}
+    spec:
+      serviceAccountName: chaos-control-plane
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+      - name: control-plane
+        image: chaos-engineering/control-plane:v1.0.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: grpc
+          containerPort: 9090
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: LOG_LEVEL
+          value: "info"
+        - name: METRICS_ENABLED
+          value: "true"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: chaos-db-credentials
+              key: url
+        - name: VAULT_ENABLED
+          value: "true"
+        - name: VAULT_SECRETS_PATH
+          value: "/vault/secrets"
+        - name: CLOUD_CREDENTIALS_TYPE
+          value: "vault"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/chaos-engineering
+        - name: experiments-volume
+          mountPath: /var/lib/chaos-engineering/experiments
+        - name: vault-config
+          mountPath: /etc/vault
+      volumes:
+      - name: config-volume
+        configMap:
+          name: chaos-control-plane-config
+      - name: experiments-volume
+        persistentVolumeClaim:
+          claimName: chaos-experiments-pvc
+      - name: vault-config
+        configMap:
+          name: vault-integration
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chaos-control-plane
+  namespace: chaos-engineering
+  labels:
+    app: chaos-control-plane
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 9090
+    targetPort: grpc
+    protocol: TCP
+  selector:
+    app: chaos-control-plane
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chaos-control-plane-config
+  namespace: chaos-engineering
+data:
+  config.yaml: |
+    scheduler:
+      concurrentExperiments: 5
+      defaultTimeoutSeconds: 3600
+    monitoring:
+      prometheusUrl: http://prometheus.monitoring:9090
+      grafanaUrl: http://grafana.monitoring:3000
+    agents:
+      kubernetes:
+        enabled: true
+      aws:
+        enabled: true
+        credentialsType: vault
+        credentialsPath: /vault/secrets/aws
+      gcp:
+        enabled: false
+        credentialsType: vault
+        credentialsPath: /vault/secrets/gcp
+      azure:
+        enabled: false
+        credentialsType: vault
+        credentialsPath: /vault/secrets/azure
+    security:
+      rbacEnabled: true
+      auditLogging: true
+      secretsManager: vault
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chaos-experiments-pvc
+  namespace: chaos-engineering
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-control-plane
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "nodes"]
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["chaos.example.com"]
+  resources: ["chaosexperiments", "chaosresults"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-control-plane
+subjects:
+- kind: ServiceAccount
+  name: chaos-control-plane
+  namespace: chaos-engineering
+roleRef:
+  kind: ClusterRole
+  name: chaos-control-plane
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-control-plane
+  namespace: chaos-engineering

@@ -1,0 +1,127 @@
+server:
+  # Set the number of server replicas
+  ha:
+    enabled: true
+    replicas: 3
+    
+  # Configure Vault server
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+    
+  # Configure Vault UI
+  ui:
+    enabled: true
+    serviceType: ClusterIP
+    
+  # Configure Vault service account
+  serviceAccount:
+    create: true
+    name: vault
+    
+  # Configure Vault resources
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+      
+  # Configure Vault affinity
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+              app.kubernetes.io/instance: vault
+              component: server
+          topologyKey: kubernetes.io/hostname
+          
+  # Configure Vault annotations
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8200"
+    
+  # Configure Vault extraEnvironmentVars
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-tls/ca.crt
+    
+  # Configure Vault extraVolumes
+  extraVolumes:
+    - type: secret
+      name: vault-tls
+      
+  # Configure Vault extraVolumeMounts
+  extraVolumeMounts:
+    - mountPath: /vault/userconfig/vault-tls
+      name: vault-tls
+      
+  # Configure Vault standalone config
+  standalone:
+    enabled: false
+    
+  # Configure Vault HA config
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+        
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+        
+        storage "raft" {
+          path = "/vault/data"
+          retry_join {
+            leader_api_addr = "http://vault-0.vault-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://vault-1.vault-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://vault-2.vault-internal:8200"
+          }
+        }
+        
+        service_registration "kubernetes" {}
+        
+        seal "transit" {
+          address = "http://vault-transit:8200"
+          token = "root"
+          key_name = "autounseal"
+          mount_path = "transit/"
+          tls_skip_verify = true
+        }
+        
+# Configure Vault injector
+injector:
+  enabled: true
+  replicas: 2
+  
+  # Configure Vault injector resources
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+      
+  # Configure Vault injector affinity
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault-agent-injector
+              app.kubernetes.io/instance: vault
+          topologyKey: kubernetes.io/hostname 

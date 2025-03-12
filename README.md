@@ -1,148 +1,198 @@
-# ECS Fargate Stack with ALB and VPC
+# Chaos Engineering Platform
 
-The infrastructure includes:
-- VPC with public and private subnets across 2 AZs
-- Application Load Balancer (ALB)
-- ECS Fargate cluster
-- Auto Scaling
-- CloudWatch Logs
-- NAT Gateway for private subnet internet access
-- Security Groups and IAM roles
+## Overview
+A comprehensive platform for implementing chaos engineering practices in cloud-native environments. This platform enables organizations to proactively identify system weaknesses by injecting controlled failures and observing system behavior under stress conditions.
 
-# AWS VPC Infrastructure Explained
+## Key Features
+- **Automated Failure Injection**: Programmatically introduce failures across infrastructure, network, and application layers
+- **Real-time Monitoring**: Observe system behavior during chaos experiments with integrated dashboards
+- **Experiment Scheduling**: Plan and execute experiments during designated maintenance windows
+- **Resilience Metrics**: Quantify system resilience through standardized metrics
+- **Multi-cloud Support**: Run experiments across AWS, GCP, Azure, and on-premises environments
+- **Secure Secrets Management**: Integration with HashiCorp Vault for secure credential storage and access
 
-## What is a VPC?
-Think of a VPC as your private cloud datacenter. We're using IP range 10.0.0.0/16, giving us 65,536 addresses to work with.
-
-## Network Zones
-
-### Public Areas (The Front Yard)
-- Located in two zones: 10.0.1.0/24 and 10.0.2.0/24
-- Direct internet access
-- Perfect for websites and APIs
-- Servers automatically get public IPs
-
-### Private Areas (The Back Yard)
-- Located in two zones: 10.0.3.0/24 and 10.0.4.0/24
-- No direct internet access
-- Ideal for databases and internal services
-- Extra security through isolation
-
-## Internet Access
-
-### For Public Resources (Internet Gateway)
-- Main door to the internet
-- Direct two-way communication
-- Used by load balancers and public APIs
-
-### For Private Resources (NAT Gateway)
-- Secure one-way internet access
-- Allows downloads and updates
-- Can reach out, but no incoming traffic
-- Placed in public subnet
-
-## Why Two of Everything?
-- Two zones = backup plan
-- If one fails, the other keeps running
-- Critical for 24/7 uptime
-
-## Security Setup
-- Public areas: Controlled access through security groups
-- Private areas: Extra isolated, limited access
-- Load Balancer: Accepts web traffic (port 80)
-- Containers: Only accept traffic from load balancer (port 3000)
-
-## Cost Tips
-- NAT Gateway charges hourly
-- Choose regions carefully
-- Each subnet fits 256 IPs
-- Plan capacity based on needs
-
-### Components
-- **ECS Fargate Cluster**: Serverless compute for Docker containers
-- **Application Load Balancer**: HTTP/80 traffic routing
-- **Auto Scaling**: CPU-based (70% target)
-- **CloudWatch Logs**: 30-day retention
-
-### Security
-- ALB Security Group: Inbound HTTP/80
-- ECS Security Group: Inbound from ALB/3000
-- IAM Roles:
-  - ECSTaskExecutionRole
-  - AutoScalingRole
-
-## Prerequisites
-
-1. Configure AWS credentials
-```bash
-aws configure
+## Architecture
+```mermaid
+graph TD
+    A[Control Plane] --> B[Experiment Scheduler]
+    A --> C[Metrics Collector]
+    A --> D[Experiment Repository]
+    A --> V[Vault Integration]
+    
+    B --> E[Kubernetes Agent]
+    B --> F[Cloud Provider Agent]
+    B --> G[Network Agent]
+    
+    E --> H[Pod Failures]
+    E --> I[Resource Exhaustion]
+    
+    F --> J[Instance Termination]
+    F --> K[Zone Outages]
+    
+    G --> L[Latency Injection]
+    G --> M[Packet Loss]
+    
+    C --> N[Prometheus]
+    C --> O[Grafana Dashboards]
+    
+    D --> P[Experiment History]
+    D --> Q[Resilience Reports]
+    
+    V --> R[AWS Credentials]
+    V --> S[GCP Credentials]
+    V --> T[Azure Credentials]
 ```
 
-## Deployment
+## Technologies
+- Kubernetes for orchestration
+- Prometheus and Grafana for monitoring
+- gRPC for agent communication
+- Envoy for network chaos
+- Terraform for infrastructure provisioning
+- HashiCorp Vault for secrets management
 
-1. Clone repository:
-```bash
-git clone https://github.com/your-username/your-repo-name.git
-cd your-repo-name
-```
+## Failure Injection Capabilities
 
-2. Make script executable:
-```bash
-chmod +x deploy.sh
-```
+### Infrastructure Layer
+- Instance termination
+- Zone/region failover
+- Resource exhaustion (CPU, memory)
+- Disk failures
 
-3. Deploy:
+### Network Layer
+- Latency injection
+- Packet loss/corruption
+- DNS failures
+- Connection interruption
+
+### Application Layer
+- API errors
+- Dependency failures
+- Database query delays
+- Cache invalidation
+
+## Resilience Metrics
+- **Mean Time to Recovery (MTTR)**: Average time to recover from a failure
+- **Error Budget Consumption**: Rate at which the error budget is being used
+- **Failure Injection Rate**: Number of chaos experiments run per week/month
+- **Resilience Score**: Composite metric of system's ability to withstand failures
+
+## Implementation Phases
+
+### Phase 1: Foundation
+- Control plane deployment
+- Basic Kubernetes pod failure experiments
+- Initial monitoring integration
+- Vault integration for secrets management
+
+### Phase 2: Advanced Capabilities
+- Multi-cloud provider support
+- Network chaos experiments
+- Scheduled experiments
+- Dynamic secrets with Vault
+
+### Phase 3: Enterprise Features
+- Compliance reporting
+- Advanced analytics
+- Automated remediation
+- Secret rotation and audit logging
+
+## Getting Started
+
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/chaos-engineering.git
+
+# Deploy the control plane
+cd chaos-engineering
 ./deploy.sh
-```
-![Logo](/images/deploy.png)
-![Logo](/images/running.png)
 
-## ⚙️ Configuration Options
+# Set up Vault for secrets management
+./setup-vault.sh
 
-### Auto Scaling
-- Minimum instances: 2
-- Maximum instances: 4
-- Scale up when CPU > 70%
+# Configure cloud provider access
+./configure-cloud-access.sh --provider aws
 
-### Health Checks
-- Path: /health
-- Interval: 15 seconds
-- Timeout: 3 seconds
-- Healthy threshold: 2
-- Unhealthy threshold: 2
-
-## 📝 Notes
-
-- Initial deployment takes ~10-15 minutes
-- Subsequent updates are faster (~3-5 minutes)
-- NAT Gateway incurs hourly charges
-- Private subnets ensure better security for ECS tasks
-- Rolling deployments ensure zero-downtime updates
-
-
-## Cleanup
-
-Remove resources:
-```bash
-aws cloudformation delete-stack --stack-name moziostack
-aws ecr delete-repository --repository-name mozioecr --force
+# Run your first experiment
+kubectl apply -f examples/pod-failure-experiment.yaml
 ```
 
-## Troubleshooting
+## Example Experiments
 
-### Docker Build Issues
-- Verify Dockerfile configuration
-- Check network connectivity
+### Pod Failure Experiment
+```yaml
+apiVersion: chaos.example.com/v1
+kind: ChaosExperiment
+metadata:
+  name: pod-failure-test
+spec:
+  target:
+    namespace: production
+    selector:
+      app: payment-service
+  action:
+    type: podFailure
+    duration: 5m
+    count: 1
+  schedule:
+    timeWindow:
+      start: "2023-06-01T01:00:00Z"
+      end: "2023-06-01T02:00:00Z"
+  monitoring:
+    prometheus:
+      endpoint: http://prometheus.monitoring:9090
+    alerts:
+      - name: HighErrorRate
+        threshold: 1%
+```
 
-### ECR Push Failures
-- Verify AWS_ACCOUNT_ID
-- Check IAM permissions
+### Network Latency Experiment
+```yaml
+apiVersion: chaos.example.com/v1
+kind: ChaosExperiment
+metadata:
+  name: api-latency-test
+spec:
+  target:
+    namespace: production
+    selector:
+      app: api-gateway
+  action:
+    type: networkLatency
+    latency: 500ms
+    duration: 10m
+    percentage: 50
+  schedule:
+    cron: "0 1 * * 2"  # Every Tuesday at 1 AM
+  monitoring:
+    grafanaDashboard: http://grafana.monitoring/d/chaos-experiments
+```
 
-### ALB Health Check Issues
-- Verify container port configuration
-- Ensure /health endpoint returns 200
+## Business Benefits
+- **Improved Reliability**: Proactively identify and fix weaknesses before they affect customers
+- **Reduced Downtime Costs**: Lower MTTR through practiced recovery procedures
+- **Increased Confidence**: Safely deploy changes knowing systems can handle unexpected conditions
+- **Cost Optimization**: Right-size infrastructure based on actual resilience requirements
+- **Competitive Advantage**: Deliver more reliable services than competitors
+- **Enhanced Security**: Secure management of sensitive credentials with Vault
 
-### CloudFormation Rollback
-- Review CloudFormation events
-- Verify resource availability
+## Case Studies
+
+### Financial Services Company
+Implemented chaos engineering to test their trading platform's resilience. Discovered and fixed critical weaknesses in their database failover mechanism, preventing a potential outage that would have cost an estimated $2M per hour.
+
+### E-commerce Platform
+Used network chaos experiments to identify performance degradation during simulated CDN failures. Implemented caching improvements that maintained 99.9% availability during an actual provider outage.
+
+## Documentation
+
+- [Getting Started Guide](docs/getting-started.md)
+- [Experiment Types](docs/experiment-types.md)
+- [Vault Integration](docs/vault-integration.md)
+- [API Reference](docs/api-reference.md)
+
+## Contributing
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to submit pull requests, report issues, and suggest features.
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
