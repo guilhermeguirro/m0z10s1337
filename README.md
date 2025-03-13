@@ -82,3 +82,5 @@ For effective chaos engineering, it's essential to monitor your applications dur
 ## License
 
 MIT 
+
+Add comprehensive chaos engineering toolkit with pod failure, network latency, resource stress, and secret rotation experiments 
