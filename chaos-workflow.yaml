@@ -1,0 +1,95 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: resilience-test-workflow
+  namespace: chaos-testing
+spec:
+  entry: entry
+  templates:
+    - name: entry
+      templateType: Serial
+      deadline: 240s
+      children:
+        - network-delay
+        - cpu-stress
+        - memory-stress
+        - pod-failure
+        - io-delay
+    
+    - name: network-delay
+      templateType: Task
+      task:
+        networkChaos:
+          action: delay
+          mode: all
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          delay:
+            latency: "200ms"
+            correlation: "25"
+            jitter: "50ms"
+          duration: "30s"
+    
+    - name: cpu-stress
+      templateType: Task
+      task:
+        stressChaos:
+          mode: all
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          stressors:
+            cpu:
+              workers: 2
+              load: 75
+          duration: "45s"
+    
+    - name: memory-stress
+      templateType: Task
+      task:
+        stressChaos:
+          mode: all
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          stressors:
+            memory:
+              workers: 2
+              size: "256MB"
+          duration: "45s"
+    
+    - name: pod-failure
+      templateType: Task
+      task:
+        podChaos:
+          action: pod-failure
+          mode: one
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          duration: "30s"
+    
+    - name: io-delay
+      templateType: Task
+      task:
+        ioChaos:
+          action: latency
+          mode: all
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          delay: "100ms"
+          path: "/data"
+          percent: 50
+          duration: "30s" 

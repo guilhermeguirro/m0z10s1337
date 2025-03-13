@@ -1,0 +1,26 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-latency-example
+  namespace: chaos-testing
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: resilient-app  # Target the resilient-app we were testing
+  delay:
+    latency: "200ms"
+    correlation: "25"
+    jitter: "50ms"
+  duration: "30s"
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: prometheus  # Target communication to prometheus
+    mode: one 

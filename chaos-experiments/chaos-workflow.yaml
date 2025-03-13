@@ -1,0 +1,107 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: resilience-test-workflow
+  namespace: chaos-testing
+spec:
+  entry: entry
+  templates:
+    - name: entry
+      templateType: Serial
+      deadline: 600s
+      children:
+        - network-delay
+        - pod-failure
+        - cpu-stress
+        - memory-stress
+        - io-chaos
+    
+    - name: network-delay
+      templateType: Task
+      task:
+        networkChaos:
+          action: delay
+          mode: one
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          delay:
+            latency: "200ms"
+            correlation: "25"
+            jitter: "50ms"
+          duration: "60s"
+          direction: to
+          target:
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: resilient-app
+            mode: one
+    
+    - name: pod-failure
+      templateType: Task
+      task:
+        podChaos:
+          action: pod-failure
+          mode: one
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          duration: "45s"
+          containerNames: [""]
+    
+    - name: cpu-stress
+      templateType: Task
+      task:
+        stressChaos:
+          mode: one
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          stressors:
+            cpu:
+              workers: 2
+              load: 90
+              options: ["--cpu 2", "--timeout 120s"]
+          duration: "90s"
+    
+    - name: memory-stress
+      templateType: Task
+      task:
+        stressChaos:
+          mode: one
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          stressors:
+            memory:
+              workers: 2
+              size: "512MB"
+              options: ["--vm 2", "--vm-bytes 512M", "--timeout 120s"]
+          duration: "75s"
+    
+    - name: io-chaos
+      templateType: Task
+      task:
+        ioChaos:
+          action: latency
+          mode: one
+          selector:
+            namespaces:
+              - default
+            labelSelectors:
+              app: resilient-app
+          volumePath: /
+          path: "*"
+          delay: "100ms"
+          percent: 50
+          duration: "60s" 

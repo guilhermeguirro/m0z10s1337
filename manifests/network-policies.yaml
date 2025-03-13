@@ -1,0 +1,72 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-chaos-testing
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: resilient-app
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: chaos-testing
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: chaos-testing
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: resilient-app
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-secrets-rotation
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      secrets: "true"
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 169.254.169.254/32  # AWS metadata service
+    - podSelector:
+        matchLabels:
+          app: vault 

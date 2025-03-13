@@ -1,0 +1,17 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: cpu-stress-test
+  namespace: default
+spec:
+  mode: all
+  selector:
+    namespaces: ["default"]
+    labelSelectors:
+      "app": "resilient-app"  # targeting our resilient-app
+  stressors:
+    cpu:
+      workers: 2
+      load: 75    # 75% CPU load
+      options: ["--cpu-method all"]  # stress all CPU methods
+  duration: "5m"  # run for 5 minutes 

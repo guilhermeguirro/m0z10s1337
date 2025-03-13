@@ -1,0 +1,18 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: cpu-stress-chaos
+  namespace: chaos-testing
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: resilient-app
+  stressors:
+    cpu:
+      workers: 2
+      load: 90
+      options: ["--cpu 2", "--timeout 120s"]
+  duration: "90s" 

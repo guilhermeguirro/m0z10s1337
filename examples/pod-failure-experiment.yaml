@@ -1,0 +1,82 @@
+apiVersion: chaos.example.com/v1
+kind: ChaosExperiment
+metadata:
+  name: payment-service-pod-failure
+  namespace: chaos-engineering
+  labels:
+    app: payment-service
+    type: pod-failure
+    environment: staging
+  annotations:
+    description: "Test payment service resilience to pod failures"
+    owner: "platform-team@example.com"
+spec:
+  target:
+    namespace: staging
+    selector:
+      matchLabels:
+        app: payment-service
+        tier: backend
+    excludedPods:
+      - payment-service-leader-0
+  action:
+    type: podFailure
+    mode: one
+    duration: 5m
+    interval: 10s
+    count: 1
+    gracePeriod: 0
+  schedule:
+    timeWindow:
+      start: "2023-06-01T01:00:00Z"
+      end: "2023-06-01T02:00:00Z"
+    daysOfWeek:
+      - Monday
+      - Wednesday
+    timeZone: "UTC"
+    repeat: true
+  monitoring:
+    prometheus:
+      endpoint: http://prometheus.monitoring:9090
+      queries:
+        - name: errorRate
+          query: 'sum(rate(http_requests_total{status=~"5..",service="payment-service"}[1m])) / sum(rate(http_requests_total{service="payment-service"}[1m])) * 100'
+          threshold: 1.0
+          operator: lt
+        - name: latency
+          query: 'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="payment-service"}[1m])) by (le))'
+          threshold: 0.5
+          operator: lt
+    alerts:
+      - name: HighErrorRate
+        threshold: 5
+        duration: 1m
+      - name: ServiceUnavailable
+        threshold: 100
+        duration: 30s
+  statusChecks:
+    - type: http
+      endpoint: https://api.example.com/health
+      expectedStatus: 200
+      interval: 10s
+      timeout: 5s
+      failureThreshold: 3
+    - type: prometheus
+      query: 'up{job="payment-service"}'
+      expectedValue: 1
+      interval: 30s
+  cleanup:
+    enabled: true
+    deleteNamespace: false
+    restoreState: true
+  results:
+    storeInCluster: true
+    exportMetrics: true
+    notifyOnCompletion: true
+    notifyOnFailure: true
+    recipients:
+      - type: slack
+        channel: "#chaos-experiments"
+      - type: email
+        address: "team@example.com"
+  dryRun: false

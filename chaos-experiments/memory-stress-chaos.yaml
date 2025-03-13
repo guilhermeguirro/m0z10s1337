@@ -1,0 +1,18 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: memory-stress-chaos
+  namespace: chaos-testing
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: resilient-app
+  stressors:
+    memory:
+      workers: 2
+      size: "512MB"
+      options: ["--vm 2", "--vm-bytes 512M", "--timeout 120s"]
+  duration: "75s" 
