@@ -1,3 +1,10 @@
+metadata:
+  name: vault-values
+  namespace: vault-system
+  labels:
+    app: vault
+    component: values
+
 server:
   # Set the number of server replicas
   ha:
