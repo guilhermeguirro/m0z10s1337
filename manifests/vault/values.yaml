@@ -4,6 +4,8 @@ metadata:
   labels:
     app: vault
     component: values
+kind: ConfigMap
+apiVersion: v1
 
 server:
   # Set the number of server replicas
